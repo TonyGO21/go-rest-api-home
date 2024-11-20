@@ -1,13 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
 
-// Task ...
+// Tasks
 type Task struct {
 	ID           string   `json:"id"`
 	Description  string   `json:"description"`
@@ -39,17 +40,74 @@ var tasks = map[string]Task{
 	},
 }
 
-// Ниже напишите обработчики для каждого эндпоинта
-// ...
+// Обработчик для получения всех задач
+func getAllTasksHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(tasks); err != nil {
+		http.Error(w, "Ошибка при получении задач", http.StatusInternalServerError)
+	}
+}
+
+// Обработчик для отправки задачи на сервер
+func createTaskHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var task Task
+	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+		http.Error(w, "Неверный формат задачи", http.StatusBadRequest)
+		return
+	}
+
+	if _, exists := tasks[task.ID]; exists {
+		http.Error(w, "Задача с таким ID уже существует", http.StatusBadRequest)
+		return
+	}
+
+	tasks[task.ID] = task
+	w.WriteHeader(http.StatusCreated)
+}
+
+// Обработчик для получения задачи по ID
+func getTaskByIDHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	id := chi.URLParam(r, "id")
+	task, exists := tasks[id]
+	if !exists {
+		http.Error(w, "Задача не найдена", http.StatusBadRequest)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(task); err != nil {
+		http.Error(w, "Ошибка при отправке задачи", http.StatusInternalServerError)
+	}
+}
+
+// Обработчик для удаления задачи по ID
+func deleteTaskByIDHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	id := chi.URLParam(r, "id")
+	if _, exists := tasks[id]; !exists {
+		http.Error(w, "Задача не найдена", http.StatusBadRequest)
+		return
+	}
+
+	delete(tasks, id)
+	w.WriteHeader(http.StatusOK)
+}
 
 func main() {
 	r := chi.NewRouter()
 
-	// здесь регистрируйте ваши обработчики
-	// ...
+	// Регистрация обработчиков
+	r.Get("/tasks", getAllTasksHandler)
+	r.Post("/tasks", createTaskHandler)
+	r.Get("/tasks/{id}", getTaskByIDHandler)
+	r.Delete("/tasks/{id}", deleteTaskByIDHandler)
 
+	fmt.Println("Сервер запущен на порту 8080")
 	if err := http.ListenAndServe(":8080", r); err != nil {
 		fmt.Printf("Ошибка при запуске сервера: %s", err.Error())
-		return
 	}
 }
